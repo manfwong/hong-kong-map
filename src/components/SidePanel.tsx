@@ -161,7 +161,7 @@ function Intro({ network, cameraCount }: { network: Network; cameraCount: number
     <div>
       <h2 className="text-lg font-semibold">怎樣使用</h2>
       <p className="mt-2 text-sm leading-6 text-[#3f3a34]">
-        點選車站，查看即將到站的列車。點選橙色快拍點，查看該處最新路面照片。縮小全港時，快拍點會合成數字，放大後才逐個分開。
+        點選車站，查看即將到站的列車。彩色圓點會沿路軌移動，位置是按到站時間估算，不是列車的真實定位。點選橙色快拍點，查看該處最新路面照片。
       </p>
       <p className="mt-3 text-sm leading-6 text-[#3f3a34]">
         地圖有十條港鐵綫、{network.stations.length} 個車站（包括馬場站）和 {cameraCount.toLocaleString('zh-Hant')} 個交通快拍點。暫時沒有班次或照片時，畫面會直接說明。

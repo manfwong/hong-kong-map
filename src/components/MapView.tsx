@@ -1,5 +1,6 @@
 import { GeoJSONSource, LngLatBounds, Map, NavigationControl, setWorkerUrl, type PaddingOptions } from 'maplibre-gl'
 import { useEffect, useRef, useState } from 'react'
+import type { TrainMarker } from '../lib/trains.ts'
 import type { CameraSite, Network } from '../types.ts'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -20,6 +21,8 @@ type Props = {
   cameras: CameraSite[]
   showRail: boolean
   showCameras: boolean
+  showTrains: boolean
+  trains: TrainMarker[]
   selectedStation: string | null
   selectedCamera: string | null
   focus: MapFocus | null
@@ -50,6 +53,8 @@ export function MapView({
   cameras,
   showRail,
   showCameras,
+  showTrains,
+  trains,
   selectedStation,
   selectedCamera,
   focus,
@@ -243,6 +248,18 @@ export function MapView({
           'text-halo-width': 1.4,
         },
       })
+      map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: 'train-dots',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': 6,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
       map.addLayer({
         id: 'selection-ring',
         type: 'circle',
@@ -349,6 +366,23 @@ export function MapView({
         : [],
     })
   }, [cameras, network.stations, ready, selectedCamera, selectedStation])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready || !map.getLayer('train-dots')) return
+    const source = map.getSource('trains')
+    if (source instanceof GeoJSONSource) {
+      source.setData({
+        type: 'FeatureCollection',
+        features: trains.map((train) => ({
+          type: 'Feature' as const,
+          properties: { color: train.color, title: train.title },
+          geometry: { type: 'Point' as const, coordinates: [train.lng, train.lat] },
+        })),
+      })
+    }
+    map.setLayoutProperty('train-dots', 'visibility', showTrains ? 'visible' : 'none')
+  }, [ready, showTrains, trains])
 
   useEffect(() => {
     const map = mapRef.current

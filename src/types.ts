@@ -3,6 +3,7 @@ export type LineRef = {
   name: string
   color: string
   terminus: boolean
+  seq: number
 }
 
 export type Station = {

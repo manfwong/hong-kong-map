@@ -276,6 +276,16 @@ def main() -> None:
             return False
         return all(variant[0] == code or variant[-1] == code for variant in relevant)
 
+    def line_sequence(code: str, line_code: str) -> float | None:
+        direct = [
+            row
+            for row in rows
+            if row["Line Code"] == line_code and row["Station Code"] == code and row["Direction"] == "DT"
+        ]
+        if direct:
+            return float(direct[0]["Sequence"])
+        return 0
+
     stations = []
     for code, station in sorted(by_code.items(), key=lambda item: item[1]["name"]):
         lng, lat = coordinates[code]
@@ -291,11 +301,21 @@ def main() -> None:
                         "name": LINE_BY_CODE[line_code]["name"],
                         "color": LINE_BY_CODE[line_code]["color"],
                         "terminus": is_terminus(code, line_code),
+                        "seq": line_sequence(code, line_code),
                     }
                     for line_code in line_codes
                 ],
             }
         )
+
+    uni = next((line["seq"] for station in stations if station["code"] == "UNI" for line in station["lines"] if line["code"] == "EAL"), 0)
+    fot = next((line["seq"] for station in stations if station["code"] == "FOT" for line in station["lines"] if line["code"] == "EAL"), 0)
+    for station in stations:
+        if station["code"] != "RAC":
+            continue
+        for line in station["lines"]:
+            if line["code"] == "EAL" and uni and fot:
+                line["seq"] = (uni + fot) / 2
 
     features = route_features()
 

@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapView, type MapFocus } from './components/MapView.tsx'
 import { SidePanel } from './components/SidePanel.tsx'
 import { presentLine } from './lib/schedule.ts'
+import { useMovingTrains } from './lib/useMovingTrains.ts'
 import type { CameraSite, LineSchedule, Network, SchedulePayload, Station } from './types.ts'
+
+const emptyNetwork: Network = { lines: [], stations: [], routes: { type: 'FeatureCollection', features: [] } }
 
 type FetchedLine = {
   payload: SchedulePayload | null
@@ -16,6 +19,7 @@ export default function App() {
   const [mapProblem, setMapProblem] = useState(false)
   const [showRail, setShowRail] = useState(true)
   const [showCameras, setShowCameras] = useState(true)
+  const [showTrains, setShowTrains] = useState(true)
   const [stationCode, setStationCode] = useState<string | null>(null)
   const [cameraKey, setCameraKey] = useState<string | null>(null)
   const [focus, setFocus] = useState<MapFocus | null>(null)
@@ -153,6 +157,8 @@ export default function App() {
     setMapProblem(failed)
   }, [])
 
+  const trains = useMovingTrains(network ?? emptyNetwork, Boolean(network) && showTrains, stationCode)
+
   if (dataError) {
     return (
       <main className="grid h-full place-items-center px-6 text-center">
@@ -193,6 +199,14 @@ export default function App() {
           >
             交通快拍
           </button>
+          <button
+            type="button"
+            aria-pressed={showTrains}
+            className={`rounded-full px-3 py-1.5 text-sm ${showTrains ? 'bg-[#0f3d4c] text-white' : 'bg-white text-[#1c1915] ring-1 ring-[#e4ddd2]'}`}
+            onClick={() => setShowTrains((value) => !value)}
+          >
+            列車
+          </button>
         </div>
       </header>
       <div className="relative min-h-0 flex-1">
@@ -201,6 +215,8 @@ export default function App() {
           cameras={cameras}
           showRail={showRail}
           showCameras={showCameras}
+          showTrains={showTrains}
+          trains={trains}
           selectedStation={stationCode}
           selectedCamera={cameraKey}
           focus={focus}
