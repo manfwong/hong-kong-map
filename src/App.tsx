@@ -5,8 +5,6 @@ import { presentLine } from './lib/schedule.ts'
 import { useMovingTrains } from './lib/useMovingTrains.ts'
 import type { CameraSite, LineSchedule, Network, SchedulePayload, Station } from './types.ts'
 
-const emptyNetwork: Network = { lines: [], stations: [], routes: { type: 'FeatureCollection', features: [] } }
-
 type FetchedLine = {
   payload: SchedulePayload | null
   failed: boolean
@@ -24,6 +22,7 @@ export default function App() {
   const [cameraKey, setCameraKey] = useState<string | null>(null)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [fetched, setFetched] = useState<Record<string, FetchedLine>>({})
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
 
@@ -68,7 +67,7 @@ export default function App() {
     let queued = false
 
     const run = async () => {
-      if (!active || controller.signal.aborted) return
+      if (!active || controller.signal.aborted || document.hidden) return
       if (inFlight) {
         queued = true
         return
@@ -101,6 +100,7 @@ export default function App() {
         )
         if (!active || controller.signal.aborted) return
         setFetched(next)
+        setFetchedAt(Date.now())
         setLoading(false)
       } finally {
         inFlight = false
@@ -113,10 +113,15 @@ export default function App() {
 
     void run()
     const timer = window.setInterval(() => void run(), 20000)
+    const onVisible = () => {
+      if (!document.hidden) void run()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       active = false
       controller.abort()
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [reloadToken, station])
 
@@ -137,6 +142,7 @@ export default function App() {
     setCameraKey(null)
     if (!sameStation) {
       setFetched({})
+      setFetchedAt(null)
       setLoading(true)
     }
     if (shouldFocus) {
@@ -145,9 +151,11 @@ export default function App() {
   }, [])
 
   const chooseCamera = useCallback((next: CameraSite, shouldFocus: boolean) => {
+    stationCodeRef.current = null
     setCameraKey(next.key)
     setStationCode(null)
     setFetched({})
+    setFetchedAt(null)
     if (shouldFocus) {
       setFocus({ lng: next.lng, lat: next.lat, zoom: 16, token: Date.now() })
     }
@@ -157,7 +165,7 @@ export default function App() {
     setMapProblem(failed)
   }, [])
 
-  const trains = useMovingTrains(network ?? emptyNetwork, Boolean(network) && showTrains, stationCode)
+  const trains = useMovingTrains(network, showTrains, station, fetched, fetchedAt)
 
   if (dataError) {
     return (
@@ -251,6 +259,7 @@ export default function App() {
                 setStationCode(null)
                 setCameraKey(null)
                 setFetched({})
+                setFetchedAt(null)
               }}
               onRetry={() => setReloadToken((value) => value + 1)}
             />
