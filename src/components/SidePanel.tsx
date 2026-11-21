@@ -175,7 +175,7 @@ function Intro({ network, cameraCount }: { network: Network; cameraCount: number
         ))}
       </ul>
       <p className="mt-4 text-xs leading-5 text-[#6b645c]">
-        底圖來自 OpenFreeMap 和 OpenStreetMap。到站資料來自港鐵公司，約每十秒更新。快拍圖像來自運輸署，約每兩分鐘更新。車站位置採用 OpenStreetMap 的車站中心，路線是站與站之間的示意線。
+        底圖來自 OpenFreeMap 和 OpenStreetMap。到站資料來自港鐵公司，約每十秒更新。快拍圖像來自運輸署，約每兩分鐘更新。車站和路軌曲線都來自 OpenStreetMap，路軌沿真實走線繪出。
       </p>
     </div>
   )

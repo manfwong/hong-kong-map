@@ -32,7 +32,7 @@ python3 scripts/prepare_data.py
 - 底圖：OpenFreeMap 公開樣式 `liberty`，地圖資料來自 OpenStreetMap
 - 港鐵車站和路線順序：<https://opendata.mtr.com.hk/data/mtr_lines_and_stations.csv>
 - 港鐵到站班次：<https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php>
-- 車站座標：OpenStreetMap，以官方車站代碼配對後存檔
+- 車站座標和路軌曲線：OpenStreetMap。路軌沿真實走線，不是站與站之間的直線
 - 交通快拍位置和照片：<https://data.gov.hk/tc-data/dataset/hk-td-tis_2-traffic-snapshot-images>
 
 馬場站不在車站表內，但實時班次接口接受這個站。它已加在東鐵綫上，平日多數顯示「暫無即將到站班次」。

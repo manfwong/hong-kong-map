@@ -37,6 +37,23 @@ LINES = [
     {"code": "DRL", "name": "迪士尼綫", "color": "#F550A6"},
 ]
 LINE_BY_CODE = {line["code"]: line for line in LINES}
+# One OpenStreetMap route relation per track alignment. The longest joined
+# piece is the passenger line; short leftovers are depot sidings.
+ROUTE_RELATIONS = [
+    ("TWL", 269669),
+    ("TKL", 269672),
+    ("TKL", 9736610),
+    ("KTL", 272125),
+    ("EAL", 4248590),
+    ("EAL", 4248589),
+    ("EAL", 6587848),
+    ("ISL", 4432665),
+    ("DRL", 4709540),
+    ("AEL", 5317238),
+    ("TCL", 5317704),
+    ("TML", 6102298),
+    ("SIL", 6827212),
+]
 
 CONTEXT = ssl.create_default_context()
 
@@ -105,6 +122,91 @@ def choose_coordinates(elements: list[dict]) -> dict[str, tuple[float, float]]:
 
 def in_hong_kong(lng: float, lat: float) -> bool:
     return 22.15 <= lat <= 22.58 and 113.75 <= lng <= 114.50
+
+
+def metres(a: tuple[float, float], b: tuple[float, float]) -> float:
+    lat = math.radians((a[1] + b[1]) / 2)
+    return math.hypot((a[0] - b[0]) * 111_320 * math.cos(lat), (a[1] - b[1]) * 111_320)
+
+
+def chain_ways(members: list[dict], snap_m: float = 80) -> list[list[tuple[float, float]]]:
+    ways: list[list[tuple[float, float]]] = []
+    for member in members:
+        if member.get("type") != "way" or not member.get("geometry"):
+            continue
+        points = [(point["lon"], point["lat"]) for point in member["geometry"]]
+        if len(points) >= 2:
+            ways.append(points)
+    unused = set(range(len(ways)))
+    lines: list[list[tuple[float, float]]] = []
+
+    def walk(index: int, reverse: bool) -> list[tuple[float, float]]:
+        points = list(reversed(ways[index])) if reverse else ways[index][:]
+        unused.remove(index)
+        while True:
+            end = points[-1]
+            best: tuple[float, int, int] | None = None
+            for other in list(unused):
+                for end_index, candidate in ((0, ways[other][0]), (1, ways[other][-1])):
+                    gap = metres(end, candidate)
+                    if gap <= snap_m and (best is None or gap < best[0]):
+                        best = (gap, other, end_index)
+            if best is None:
+                return points
+            _, other, end_index = best
+            nxt = ways[other][:] if end_index == 0 else list(reversed(ways[other]))
+            points.extend(nxt[1:])
+            unused.remove(other)
+
+    def neighbor_count(index: int, end: int) -> int:
+        endpoint = ways[index][0] if end == 0 else ways[index][-1]
+        count = 0
+        for other, way in enumerate(ways):
+            if other == index:
+                continue
+            if metres(endpoint, way[0]) <= snap_m or metres(endpoint, way[-1]) <= snap_m:
+                count += 1
+        return count
+
+    starts = sorted(
+        (neighbor_count(index, end), index, end == 1) for index in range(len(ways)) for end in (0, 1)
+    )
+    for _, index, reverse in starts:
+        if index in unused:
+            lines.append(walk(index, reverse))
+    while unused:
+        lines.append(walk(min(unused), False))
+    return lines
+
+
+def route_features() -> list[dict]:
+    ids = ",".join(str(relation_id) for _, relation_id in ROUTE_RELATIONS)
+    elements = overpass(f"[out:json][timeout:180];relation(id:{ids});out geom;")
+    by_id = {element["id"]: element for element in elements}
+    features = []
+    for code, relation_id in ROUTE_RELATIONS:
+        element = by_id.get(relation_id)
+        if element is None:
+            raise SystemExit(f"missing OpenStreetMap route {code} {relation_id}")
+        pieces = chain_ways(element.get("members") or [])
+        if not pieces:
+            raise SystemExit(f"empty OpenStreetMap route {code}")
+        longest = max(pieces, key=lambda piece: sum(metres(a, b) for a, b in zip(piece, piece[1:])))
+        coordinates = []
+        for lng, lat in longest:
+            point = [round(lng, 6), round(lat, 6)]
+            if not coordinates or point != coordinates[-1]:
+                coordinates.append(point)
+        line = LINE_BY_CODE[code]
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {"code": code, "name": line["name"], "color": line["color"]},
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+            }
+        )
+        print(code, relation_id, "curve points", len(coordinates))
+    return features
 
 
 def main() -> None:
@@ -195,75 +297,7 @@ def main() -> None:
             }
         )
 
-    point = {station["code"]: (station["lng"], station["lat"]) for station in stations}
-
-    def route_codes(line_code: str, direction: str) -> list[str]:
-        ordered = sorted(
-            (row for row in rows if row["Line Code"] == line_code and row["Direction"] == direction),
-            key=lambda row: float(row["Sequence"]),
-        )
-        return [row["Station Code"] for row in ordered]
-
-    raw_segments: list[tuple[str, list[str]]] = []
-    for line in LINES:
-        raw_segments.append((line["code"], route_codes(line["code"], "DT")))
-        if line["code"] == "EAL":
-            raw_segments.append(("EAL", ["SHS", "LMC"]))
-            raw_segments.append(("EAL", ["UNI", "RAC", "FOT"]))
-        if line["code"] == "TKL":
-            raw_segments.append(("TKL", ["TKO", "LHP"]))
-
-    edge_owners: dict[frozenset[str], list[str]] = defaultdict(list)
-    for line_code, codes in raw_segments:
-        for start, end in zip(codes, codes[1:]):
-            edge_owners[frozenset((start, end))].append(line_code)
-
-    def offset_point(lng: float, lat: float, east_m: float, north_m: float) -> list[float]:
-        return [
-            round(lng + east_m / (111_320 * math.cos(math.radians(lat))), 6),
-            round(lat + north_m / 111_320, 6),
-        ]
-
-    features = []
-    for line_code, codes in raw_segments:
-        coords = []
-        for index, code in enumerate(codes):
-            shifts = []
-            neighbours = []
-            if index > 0:
-                neighbours.append(codes[index - 1])
-            if index < len(codes) - 1:
-                neighbours.append(codes[index + 1])
-            for other in neighbours:
-                owners = edge_owners[frozenset((code, other))]
-                if len(owners) < 2 or line_code not in owners:
-                    continue
-                slot = owners.index(line_code)
-                shift = (slot - (len(owners) - 1) / 2) * 55
-                # Use one direction for the shared edge so both ends offset to the same side.
-                first, second = sorted((code, other))
-                lng1, lat1 = point[first]
-                lng2, lat2 = point[second]
-                east = (lng2 - lng1) * 111_320 * math.cos(math.radians(lat1))
-                north = (lat2 - lat1) * 111_320
-                length = math.hypot(east, north) or 1
-                # Perpendicular, east/north in metres.
-                shifts.append((-north / length * shift, east / length * shift))
-            lng, lat = point[code]
-            if shifts:
-                east_m = sum(item[0] for item in shifts) / len(shifts)
-                north_m = sum(item[1] for item in shifts) / len(shifts)
-                coords.append(offset_point(lng, lat, east_m, north_m))
-            else:
-                coords.append([round(lng, 6), round(lat, 6)])
-        line = LINE_BY_CODE[line_code]
-        features.append(
-            {
-                "type": "Feature",
-                "properties": {"code": line_code, "name": line["name"], "color": line["color"]},
-                "geometry": {"type": "LineString", "coordinates": coords},
-            }
-        )
+    features = route_features()
 
     network = {
         "lines": LINES,
