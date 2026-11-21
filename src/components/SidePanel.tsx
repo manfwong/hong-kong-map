@@ -221,6 +221,7 @@ function StationDetail({
           </span>
         ))}
       </div>
+      <p className="mt-3 text-sm leading-6 text-[#3f3a34]">路軌上的圓點是即將到站的列車，會慢慢移向本站。</p>
       {station.code === 'RAC' ? (
         <p className="mt-3 rounded-xl bg-[#f6f1e6] px-3 py-2 text-sm leading-6">
           馬場站通常只在賽馬日開出列車。

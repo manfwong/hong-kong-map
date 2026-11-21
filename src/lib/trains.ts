@@ -74,6 +74,10 @@ function mainStops(stops: Stop[]): Stop[] {
   return stops.filter((stop) => stop.code !== 'RAC' && stop.seq > 0).sort((a, b) => a.seq - b.seq)
 }
 
+function approachStop(stops: Stop[], code: string, direction: 'UP' | 'DOWN', viaRacecourse: boolean): Stop | null {
+  return behindStop(stops, code, direction, viaRacecourse) ?? behindStop(stops, code, direction === 'UP' ? 'DOWN' : 'UP', viaRacecourse)
+}
+
 function behindStop(stops: Stop[], code: string, direction: 'UP' | 'DOWN', viaRacecourse: boolean): Stop | null {
   const ordered = mainStops(stops)
   const index = ordered.findIndex((stop) => stop.code === code)
@@ -139,7 +143,7 @@ export function trainMarkers(network: Network, cache: Record<string, { at: numbe
         const remaining = Math.max(0, Number(textOf(train.ttnt) || 0) - elapsed)
         const via = textOf(train.route).toUpperCase() === 'RAC'
         let current = here
-        let previous = behindStop(stops, current.code, direction, via)
+        let previous = approachStop(stops, current.code, direction, via)
         let minutesLeft = remaining
         let guard = 0
         while (previous && minutesLeft > 0 && guard < 6) {
@@ -147,15 +151,16 @@ export function trainMarkers(network: Network, cache: Record<string, { at: numbe
           if (minutesLeft <= hop) break
           minutesLeft -= hop
           current = previous
-          previous = behindStop(stops, current.code, direction, via)
+          previous = behindStop(stops, current.code, direction, via) ?? approachStop(stops, current.code, direction, via)
+          if (previous?.code === current.code) break
           guard += 1
         }
         let point: Point = [current.lng, current.lat]
-        if (previous && minutesLeft > 0) {
+        if (previous && previous.code !== current.code) {
           const hop = Math.max(1, metres([previous.lng, previous.lat], [current.lng, current.lat]) / 520)
           const spacing = (Math.max(1, Number(textOf(train.seq) || 1)) - 1) * 140
           const hopMetres = Math.max(140, metres([previous.lng, previous.lat], [current.lng, current.lat]))
-          const fraction = Math.max(0, Math.min(1, 1 - minutesLeft / hop - spacing / hopMetres))
+          const fraction = Math.max(0.08, Math.min(0.92, 1 - minutesLeft / hop - spacing / hopMetres))
           point = trackPoint(network, lineCode, previous, current, fraction)
         }
         const destination = stops.find((stop) => stop.code === train.dest)?.name ?? textOf(train.dest)

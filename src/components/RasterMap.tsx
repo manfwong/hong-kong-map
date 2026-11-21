@@ -274,7 +274,18 @@ export function RasterMap({
 
     if (showTrains) {
       for (const train of trains) {
-        drawDot(project(train.lng, train.lat, view, size.width, size.height), train.color, 6)
+        const point = project(train.lng, train.lat, view, size.width, size.height)
+        context.beginPath()
+        context.fillStyle = '#ffffff'
+        context.arc(point.x, point.y, 11, 0, Math.PI * 2)
+        context.fill()
+        context.beginPath()
+        context.fillStyle = train.color
+        context.strokeStyle = '#1c1915'
+        context.lineWidth = 2
+        context.arc(point.x, point.y, 7, 0, Math.PI * 2)
+        context.fill()
+        context.stroke()
       }
     }
 

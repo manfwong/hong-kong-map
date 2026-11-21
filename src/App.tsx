@@ -226,7 +226,7 @@ export default function App() {
           focus={focus}
           onSelectStation={(code) => {
             const next = network.stations.find((item) => item.code === code)
-            if (next) chooseStation(next, false)
+            if (next) chooseStation(next, true)
           }}
           onSelectCamera={(key) => {
             const next = cameras.find((item) => item.key === key)

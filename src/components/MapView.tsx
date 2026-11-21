@@ -277,14 +277,24 @@ function GlMap({
       })
       map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       map.addLayer({
+        id: 'train-halo',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-color': '#ffffff',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 9, 13, 13, 16, 18],
+          'circle-opacity': 0.95,
+        },
+      })
+      map.addLayer({
         id: 'train-dots',
         type: 'circle',
         source: 'trains',
         paint: {
           'circle-color': ['get', 'color'],
-          'circle-radius': 6,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 13, 9, 16, 13],
           'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
+          'circle-stroke-color': '#1c1915',
         },
       })
       map.addLayer({
@@ -408,7 +418,9 @@ function GlMap({
         })),
       })
     }
-    map.setLayoutProperty('train-dots', 'visibility', showTrains ? 'visible' : 'none')
+    const visibility = showTrains && trains.length > 0 ? 'visible' : 'none'
+    if (map.getLayer('train-halo')) map.setLayoutProperty('train-halo', 'visibility', visibility)
+    map.setLayoutProperty('train-dots', 'visibility', visibility)
   }, [ready, showTrains, trains])
 
   useEffect(() => {
