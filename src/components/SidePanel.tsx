@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CameraSite, LineSchedule, Network, Station } from '../types.ts'
 
 function placeName(description: string): string {
@@ -161,7 +161,7 @@ function Intro({ network, cameraCount }: { network: Network; cameraCount: number
     <div>
       <h2 className="text-lg font-semibold">怎樣使用</h2>
       <p className="mt-2 text-sm leading-6 text-[#3f3a34]">
-        點選車站，查看即將到站的列車。該站的列車會沿路軌移動，位置是用這次取回的到站時間估算，不是真實定位。點選橙色快拍點，查看該處最新路面照片。
+        點選車站，查看即將到站的列車。該站的列車會沿路軌移動，位置是用到站時間估算，不是真實定位。點選橙色快拍點，查看該處最新路面照片。
       </p>
       <p className="mt-3 text-sm leading-6 text-[#3f3a34]">
         地圖有十條港鐵綫、{network.stations.length} 個車站（包括馬場站）和 {cameraCount.toLocaleString('zh-Hant')} 個交通快拍點。暫時沒有班次或照片時，畫面會直接說明。
@@ -175,7 +175,7 @@ function Intro({ network, cameraCount }: { network: Network; cameraCount: number
         ))}
       </ul>
       <p className="mt-4 text-xs leading-5 text-[#6b645c]">
-        底圖來自 OpenFreeMap 和 OpenStreetMap。到站資料來自港鐵公司，約每十秒更新。快拍圖像來自運輸署，約每兩分鐘更新。車站和路軌曲線都來自 OpenStreetMap，路軌沿真實走線繪出。
+        底圖來自 OpenFreeMap 和 OpenStreetMap。到站班次和快拍照片都先經這幅地圖的共用快取：同一車站約每分鐘向港鐵取一次，同一快拍約每兩分鐘向運輸署取一次，不會由每位訪客各自查詢。路軌沿真實走線繪出。
       </p>
     </div>
   )
@@ -298,15 +298,26 @@ function StationDetail({
           </article>
         ))}
       </div>
-      <p className="mt-4 text-xs leading-5 text-[#6b645c]">到站資料來自港鐵公司。車站位置來自 OpenStreetMap。</p>
+      <p className="mt-4 text-xs leading-5 text-[#6b645c]">到站資料來自港鐵公司，約每分鐘更新一次，所有訪客共用同一份。車站位置來自 OpenStreetMap。</p>
     </div>
   )
 }
 
 function CameraDetail({ camera, onClose }: { camera: CameraSite; onClose: () => void }) {
-  const [attempt, setAttempt] = useState(0)
-  const [failed, setFailed] = useState(false)
-  const src = `${camera.url}${camera.url.includes('?') ? '&' : '?'}t=${attempt}`
+  const sharedSrc = `/api/snapshot?key=${encodeURIComponent(camera.key)}`
+  const [override, setOverride] = useState<string | null>(null)
+  const [phase, setPhase] = useState<'image' | 'loading' | 'failed'>('image')
+  const blobUrl = useRef<string | null>(null)
+  const requestId = useRef(0)
+  const alive = useRef(true)
+
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
+    }
+  }, [])
 
   return (
     <div>
@@ -327,27 +338,47 @@ function CameraDetail({ camera, onClose }: { camera: CameraSite; onClose: () => 
         </button>
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-[#efe8dc] bg-[#f6f1e6]">
-        {failed ? (
+        {phase === 'failed' ? (
           <p className="px-4 py-10 text-center text-sm leading-6">暫時未能顯示這張快拍。</p>
+        ) : phase === 'loading' ? (
+          <p className="px-4 py-10 text-center text-sm leading-6">正在載入快拍…</p>
         ) : (
           <img
-            key={src}
-            src={src}
+            src={override ?? sharedSrc}
             alt={placeName(camera.description)}
-            referrerPolicy="no-referrer"
             className="max-h-32 w-full object-cover md:aspect-[4/3] md:max-h-none"
-            onError={() => setFailed(true)}
-            onLoad={() => setFailed(false)}
+            onError={() => setPhase('failed')}
+            onLoad={() => setPhase('image')}
           />
         )}
       </div>
-      <p className="mt-3 text-sm leading-6 text-[#3f3a34]">運輸署約每兩分鐘更新這張照片。若部門暫停提供影像，可能會看到「暫時未能提供服務」的圖，或上面的說明。</p>
+      <p className="mt-3 text-sm leading-6 text-[#3f3a34]">運輸署約每兩分鐘更新這張照片。地圖會共用同一份，不會每人各向運輸署要一次。若部門暫停提供影像，可能會看到「暫時未能提供服務」的圖，或上面的說明。</p>
       <button
         type="button"
         className="mt-3 rounded-full bg-[#1c1915] px-3 py-1.5 text-sm text-[#f7f4ee]"
         onClick={() => {
-          setFailed(false)
-          setAttempt((value) => value + 1)
+          const id = requestId.current + 1
+          requestId.current = id
+          setPhase('loading')
+          void fetch(sharedSrc, { cache: 'reload' })
+            .then((response) => {
+              if (!response.ok) throw new Error(String(response.status))
+              return response.blob()
+            })
+            .then((blob) => {
+              const url = URL.createObjectURL(blob)
+              if (!alive.current || requestId.current !== id) {
+                URL.revokeObjectURL(url)
+                return
+              }
+              if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
+              blobUrl.current = url
+              setOverride(url)
+              setPhase('image')
+            })
+            .catch(() => {
+              if (alive.current && requestId.current === id) setPhase('failed')
+            })
         }}
       >
         重新載入照片

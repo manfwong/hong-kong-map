@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapView, type MapFocus } from './components/MapView.tsx'
 import { SidePanel } from './components/SidePanel.tsx'
-import { presentLine } from './lib/schedule.ts'
+import { presentLine, readCachedSchedule } from './lib/schedule.ts'
 import { useMovingTrains } from './lib/useMovingTrains.ts'
 import type { CameraSite, LineSchedule, Network, SchedulePayload, Station } from './types.ts'
 
 type FetchedLine = {
   payload: SchedulePayload | null
   failed: boolean
+  at: number | null
 }
 
 export default function App() {
@@ -22,7 +23,6 @@ export default function App() {
   const [cameraKey, setCameraKey] = useState<string | null>(null)
   const [focus, setFocus] = useState<MapFocus | null>(null)
   const [fetched, setFetched] = useState<Record<string, FetchedLine>>({})
-  const [fetchedAt, setFetchedAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
 
@@ -66,55 +66,53 @@ export default function App() {
     let inFlight = false
     let queued = false
 
-    const run = async () => {
+    let sawSchedule = false
+    let localAt = 0
+
+    const run = async (force: boolean) => {
       if (!active || controller.signal.aborted || document.hidden) return
+      if (!force && localAt !== 0 && Date.now() - localAt < 60_000) return
       if (inFlight) {
         queued = true
         return
       }
       inFlight = true
-      setLoading(true)
-      const next: Record<string, FetchedLine> = {}
+      if (!sawSchedule) setLoading(true)
       try {
-        await Promise.all(
-          station.lines.map(async (line) => {
-            const request = new AbortController()
-            const timeout = window.setTimeout(() => request.abort(), 8000)
-            const stop = () => request.abort()
-            controller.signal.addEventListener('abort', stop)
-            try {
-              const response = await fetch(
-                `https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${line.code}&sta=${station.code}&lang=TC`,
-                { signal: request.signal },
-              )
-              if (!response.ok) throw new Error(String(response.status))
-              next[line.code] = { payload: (await response.json()) as SchedulePayload, failed: false }
-            } catch {
-              if (controller.signal.aborted) return
-              next[line.code] = { payload: null, failed: true }
-            } finally {
-              window.clearTimeout(timeout)
-              controller.signal.removeEventListener('abort', stop)
-            }
-          }),
-        )
+        const response = await fetch(`/api/schedule?sta=${encodeURIComponent(station.code)}`, {
+          signal: controller.signal,
+          cache: force ? 'reload' : 'default',
+        })
+        if (!response.ok) throw new Error(String(response.status))
+        const next = readCachedSchedule(station, await response.json())
+        if (!next) throw new Error('schedule')
         if (!active || controller.signal.aborted) return
         setFetched(next)
-        setFetchedAt(Date.now())
+        sawSchedule = true
+        localAt = Date.now()
+        setLoading(false)
+      } catch {
+        if (!active || controller.signal.aborted) return
+        if (!sawSchedule) {
+          const next: Record<string, FetchedLine> = {}
+          for (const line of station.lines) next[line.code] = { payload: null, failed: true, at: null }
+          setFetched(next)
+        }
+        localAt = Date.now()
         setLoading(false)
       } finally {
         inFlight = false
         if (queued && active && !controller.signal.aborted) {
           queued = false
-          void run()
+          void run(true)
         }
       }
     }
 
-    void run()
-    const timer = window.setInterval(() => void run(), 20000)
+    void run(true)
+    const timer = window.setInterval(() => void run(false), 60_000)
     const onVisible = () => {
-      if (!document.hidden) void run()
+      if (!document.hidden) void run(false)
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
@@ -142,7 +140,6 @@ export default function App() {
     setCameraKey(null)
     if (!sameStation) {
       setFetched({})
-      setFetchedAt(null)
       setLoading(true)
     }
     if (shouldFocus) {
@@ -155,7 +152,6 @@ export default function App() {
     setCameraKey(next.key)
     setStationCode(null)
     setFetched({})
-    setFetchedAt(null)
     if (shouldFocus) {
       setFocus({ lng: next.lng, lat: next.lat, zoom: 16, token: Date.now() })
     }
@@ -165,7 +161,7 @@ export default function App() {
     setMapProblem(failed)
   }, [])
 
-  const trains = useMovingTrains(network, showTrains, station, fetched, fetchedAt)
+  const trains = useMovingTrains(network, showTrains, station, fetched)
 
   if (dataError) {
     return (
@@ -259,7 +255,6 @@ export default function App() {
                 setStationCode(null)
                 setCameraKey(null)
                 setFetched({})
-                setFetchedAt(null)
               }}
               onRetry={() => setReloadToken((value) => value + 1)}
             />

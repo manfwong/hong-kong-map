@@ -1,4 +1,4 @@
-import type { Arrival, DirectionBlock, LineRef, LineSchedule, SchedulePayload, TrainRow } from '../types.ts'
+import type { Arrival, DirectionBlock, LineRef, LineSchedule, SchedulePayload, Station, TrainRow } from '../types.ts'
 
 function textOf(value: unknown): string {
   if (value == null) return ''
@@ -74,6 +74,31 @@ function emptySchedule(line: LineRef, emptyNote: string): LineSchedule {
     emptyNote,
     updatedAt: null,
   }
+}
+
+export function readCachedSchedule(
+  station: Station,
+  body: unknown,
+): Record<string, { payload: SchedulePayload | null; failed: boolean; at: number | null }> | null {
+  if (!body || typeof body !== 'object' || !('lines' in body)) return null
+  const lines = (body as { lines?: unknown }).lines
+  if (!lines || typeof lines !== 'object') return null
+  const table = lines as Record<string, unknown>
+  const next: Record<string, { payload: SchedulePayload | null; failed: boolean; at: number | null }> = {}
+  for (const line of station.lines) {
+    const item = table[line.code]
+    if (!item || typeof item !== 'object') {
+      next[line.code] = { payload: null, failed: true, at: null }
+      continue
+    }
+    const record = item as { ok?: unknown; storedAt?: unknown; payload?: unknown }
+    if (record.ok !== true || typeof record.storedAt !== 'number' || !record.payload || typeof record.payload !== 'object') {
+      next[line.code] = { payload: null, failed: true, at: null }
+      continue
+    }
+    next[line.code] = { payload: record.payload as SchedulePayload, failed: false, at: record.storedAt }
+  }
+  return next
 }
 
 export function presentLine(

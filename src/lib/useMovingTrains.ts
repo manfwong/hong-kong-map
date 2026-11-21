@@ -4,6 +4,7 @@ import { trainMarkers, type TrainMarker } from './trains.ts'
 
 type FetchedLine = {
   payload: SchedulePayload | null
+  at: number | null
 }
 
 export function useMovingTrains(
@@ -11,7 +12,6 @@ export function useMovingTrains(
   enabled: boolean,
   station: Station | null,
   fetched: Record<string, FetchedLine>,
-  fetchedAt: number | null,
 ): TrainMarker[] {
   const [now, setNow] = useState(() => Date.now())
   const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden)
@@ -29,13 +29,13 @@ export function useMovingTrains(
   }, [enabled, station, visible])
 
   return useMemo(() => {
-    if (!network || !enabled || !station || !visible || fetchedAt == null) return []
+    if (!network || !enabled || !station || !visible) return []
     const cache: Record<string, { at: number; payload: SchedulePayload }> = {}
     for (const line of station.lines) {
-      const payload = fetched[line.code]?.payload
-      if (!payload) continue
-      cache[`${line.code}-${station.code}`] = { at: fetchedAt, payload }
+      const item = fetched[line.code]
+      if (!item?.payload || item.at == null) continue
+      cache[`${line.code}-${station.code}`] = { at: item.at, payload: item.payload }
     }
     return trainMarkers(network, cache, now)
-  }, [enabled, fetched, fetchedAt, network, now, station, visible])
+  }, [enabled, fetched, network, now, station, visible])
 }
