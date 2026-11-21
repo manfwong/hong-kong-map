@@ -1,4 +1,4 @@
-import { GeoJSONSource, LngLatBounds, Map, NavigationControl, setWorkerUrl } from 'maplibre-gl'
+import { GeoJSONSource, LngLatBounds, Map, NavigationControl, setWorkerUrl, type PaddingOptions } from 'maplibre-gl'
 import { useEffect, useRef, useState } from 'react'
 import type { CameraSite, Network } from '../types.ts'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
@@ -338,9 +338,14 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready || !focus) return
+    const narrow = window.innerWidth < 768
+    const padding: PaddingOptions = narrow
+      ? { top: 28, bottom: Math.round(window.innerHeight * 0.46) + 28, left: 20, right: 20 }
+      : { top: 28, bottom: 28, left: 28, right: 430 }
     map.flyTo({
       center: [focus.lng, focus.lat],
       zoom: Math.max(map.getZoom(), focus.zoom),
+      padding,
       essential: true,
     })
   }, [focus, ready])

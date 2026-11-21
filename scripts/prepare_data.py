@@ -240,8 +240,10 @@ def main() -> None:
                     continue
                 slot = owners.index(line_code)
                 shift = (slot - (len(owners) - 1) / 2) * 55
-                lng1, lat1 = point[code]
-                lng2, lat2 = point[other]
+                # Use one direction for the shared edge so both ends offset to the same side.
+                first, second = sorted((code, other))
+                lng1, lat1 = point[first]
+                lng2, lat2 = point[second]
                 east = (lng2 - lng1) * 111_320 * math.cos(math.radians(lat1))
                 north = (lat2 - lat1) * 111_320
                 length = math.hypot(east, north) or 1
@@ -281,14 +283,21 @@ def load_cameras() -> list[dict]:
     cameras = []
     seen: set[str] = set()
     for row in rows:
-        key = ""
         values = {name.replace("\ufeff", ""): value for name, value in row.items()}
         key = (values.get("key") or "").strip()
         lat = float(values["latitude"])
         lng = float(values["longitude"])
-        if not key or key in seen or not in_hong_kong(lng, lat):
+        url = (values.get("url") or "").strip()
+        if not key or key in seen or not in_hong_kong(lng, lat) or not url:
             raise SystemExit(f"bad camera row: {key}")
         seen.add(key)
+        # The Transport Department list currently points AID09104 (eastbound)
+        # at AID09206.JPG and the reverse. The photos themselves are labelled
+        # AID09104 EB and AID09206 WB, so the filename must match the key.
+        filename = url.rsplit("/", 1)[-1]
+        stem = filename.rsplit(".", 1)[0]
+        if stem != key:
+            url = f"{url.rsplit('/', 1)[0]}/{key}.JPG"
         cameras.append(
             {
                 "key": key,
@@ -297,7 +306,7 @@ def load_cameras() -> list[dict]:
                 "description": values.get("description", "").strip(),
                 "lat": round(lat, 6),
                 "lng": round(lng, 6),
-                "url": values.get("url", "").strip(),
+                "url": url,
             }
         )
     return cameras

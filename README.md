@@ -10,7 +10,7 @@
 
 ## 在自己的電腦運行
 
-需要 Node.js 22 或更新版本。
+需要 Node.js 22.12 或更新版本。
 
 ```bash
 npm install

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MapView, type MapFocus } from './components/MapView.tsx'
 import { SidePanel } from './components/SidePanel.tsx'
 import { presentLine } from './lib/schedule.ts'
@@ -60,30 +60,51 @@ export default function App() {
     if (!station) return
     const controller = new AbortController()
     let active = true
+    let inFlight = false
+    let queued = false
 
-    let generation = 0
     const run = async () => {
-      const current = ++generation
+      if (!active || controller.signal.aborted) return
+      if (inFlight) {
+        queued = true
+        return
+      }
+      inFlight = true
       setLoading(true)
       const next: Record<string, FetchedLine> = {}
-      await Promise.all(
-        station.lines.map(async (line) => {
-          try {
-            const response = await fetch(
-              `https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${line.code}&sta=${station.code}&lang=TC`,
-              { signal: controller.signal },
-            )
-            if (!response.ok) throw new Error(String(response.status))
-            next[line.code] = { payload: (await response.json()) as SchedulePayload, failed: false }
-          } catch {
-            if (controller.signal.aborted) return
-            next[line.code] = { payload: null, failed: true }
-          }
-        }),
-      )
-      if (!active || controller.signal.aborted || current !== generation) return
-      setFetched(next)
-      setLoading(false)
+      try {
+        await Promise.all(
+          station.lines.map(async (line) => {
+            const request = new AbortController()
+            const timeout = window.setTimeout(() => request.abort(), 8000)
+            const stop = () => request.abort()
+            controller.signal.addEventListener('abort', stop)
+            try {
+              const response = await fetch(
+                `https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${line.code}&sta=${station.code}&lang=TC`,
+                { signal: request.signal },
+              )
+              if (!response.ok) throw new Error(String(response.status))
+              next[line.code] = { payload: (await response.json()) as SchedulePayload, failed: false }
+            } catch {
+              if (controller.signal.aborted) return
+              next[line.code] = { payload: null, failed: true }
+            } finally {
+              window.clearTimeout(timeout)
+              controller.signal.removeEventListener('abort', stop)
+            }
+          }),
+        )
+        if (!active || controller.signal.aborted) return
+        setFetched(next)
+        setLoading(false)
+      } finally {
+        inFlight = false
+        if (queued && active && !controller.signal.aborted) {
+          queued = false
+          void run()
+        }
+      }
     }
 
     void run()
@@ -103,11 +124,17 @@ export default function App() {
       })
     : []
 
+  const stationCodeRef = useRef<string | null>(null)
+
   const chooseStation = useCallback((next: Station, shouldFocus: boolean) => {
+    const sameStation = stationCodeRef.current === next.code
+    stationCodeRef.current = next.code
     setStationCode(next.code)
     setCameraKey(null)
-    setFetched({})
-    setLoading(true)
+    if (!sameStation) {
+      setFetched({})
+      setLoading(true)
+    }
     if (shouldFocus) {
       setFocus({ lng: next.lng, lat: next.lat, zoom: 14.5, token: Date.now() })
     }
@@ -204,6 +231,7 @@ export default function App() {
               onPickStation={(item) => chooseStation(item, true)}
               onPickCamera={(item) => chooseCamera(item, true)}
               onClose={() => {
+                stationCodeRef.current = null
                 setStationCode(null)
                 setCameraKey(null)
                 setFetched({})
