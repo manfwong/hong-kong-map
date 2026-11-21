@@ -48,7 +48,11 @@ python3 scripts/prepare_data.py
 
 ## 發佈到 Cloudflare Workers
 
-開發伺服器和 Cloudflare Worker 用同一套快取。正式發佈用 Cloudflare Workers 免費方案，網址會是 `名稱.你的帳號.workers.dev`。頁面是靜態檔，到站班次和快拍由 Worker 代取並暫存。不要開啟 Workers 付費計劃，也不要購買網域。
+開發伺服器和 Cloudflare Worker 用同一套快取。這一版已發佈到 Cloudflare Workers 免費方案：
+
+https://hk-smart-city-map.iolowong.workers.dev
+
+頁面是靜態檔，到站班次和快拍由 Worker 代取並暫存。不要開啟 Workers 付費計劃，也不要購買網域。日後更新可以在這個資料夾執行：
 
 ```bash
 npm run build

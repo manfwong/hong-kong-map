@@ -1,7 +1,7 @@
 {
   "name": "hk-smart-city-map",
   "compatibility_date": "2026-11-21",
-  "main": "src/server/worker.ts",
+  "main": "src/server/edge.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -1,5 +1,3 @@
-import { cameraKeys, stations as publishedStations } from './allowlist.ts'
-
 const SCHEDULE_TTL_MS = 60_000
 const SNAPSHOT_TTL_MS = 120_000
 const FAILURE_TTL_MS = 60_000
@@ -79,8 +77,8 @@ export function createLiveCache(options: Options = {}): LiveCache {
   const now = options.now ?? (() => Date.now())
   const upstream = options.upstream ?? defaultUpstream
   const edge = options.edge === undefined ? cloudflareCache() : options.edge
-  const stationLines = options.stations ?? publishedStations
-  const cameras = new Set(options.cameras ?? cameraKeys)
+  const stationLines = options.stations ?? {}
+  const cameras = new Set(options.cameras ?? [])
   const scheduleTtlMs = options.scheduleTtlMs ?? SCHEDULE_TTL_MS
   const snapshotTtlMs = options.snapshotTtlMs ?? SNAPSHOT_TTL_MS
   const failureTtlMs = options.failureTtlMs ?? FAILURE_TTL_MS
@@ -286,8 +284,6 @@ export function createLiveCache(options: Options = {}): LiveCache {
     },
   }
 }
-
-export const liveCache = createLiveCache()
 
 const decoder = new TextDecoder()
 

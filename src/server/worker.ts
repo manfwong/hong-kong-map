@@ -1,4 +1,4 @@
-import { liveCache } from './liveCache.ts'
+import { liveCache } from './instance.ts'
 
 type AssetFetcher = {
   fetch(input: Request): Promise<Response>
