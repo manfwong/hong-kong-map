@@ -1,9 +1,10 @@
 import { GeoJSONSource, LngLatBounds, Map, NavigationControl, setWorkerUrl, type PaddingOptions } from 'maplibre-gl'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TrainMarker } from '../lib/trains.ts'
 import type { CameraSite, Network } from '../types.ts'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { RasterMap } from './RasterMap.tsx'
 
 setWorkerUrl(workerUrl)
 
@@ -29,6 +30,7 @@ type Props = {
   onSelectStation: (code: string) => void
   onSelectCamera: (key: string) => void
   onMapProblem: (failed: boolean) => void
+  onFallback: () => void
 }
 
 const RAIL_LAYERS = ['rail-casing', 'rail-lines', 'station-hits', 'station-points', 'station-labels']
@@ -48,7 +50,18 @@ function applyVisibility(map: Map, showRail: boolean, showCameras: boolean) {
   for (const layer of CAMERA_LAYERS) map.setLayoutProperty(layer, 'visibility', camera)
 }
 
-export function MapView({
+export function MapView(props: Omit<Props, 'onFallback'>) {
+  const [engine, setEngine] = useState<'gl' | 'raster'>('gl')
+  const report = props.onMapProblem
+  const useRaster = useCallback(() => {
+    report(false)
+    setEngine('raster')
+  }, [report])
+  if (engine === 'raster') return <RasterMap {...props} />
+  return <GlMap {...props} onFallback={useRaster} />
+}
+
+function GlMap({
   network,
   cameras,
   showRail,
@@ -61,6 +74,7 @@ export function MapView({
   onSelectStation,
   onSelectCamera,
   onMapProblem,
+  onFallback,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Map | null>(null)
@@ -82,30 +96,43 @@ export function MapView({
 
     let alive = true
     let map: Map
+    const options = {
+      container,
+      style: STYLE,
+      center: [114.15, 22.35] as [number, number],
+      zoom: 10.4,
+      attributionControl: { compact: window.innerWidth < 768 },
+      locale: {
+        'NavigationControl.ZoomIn': '放大',
+        'NavigationControl.ZoomOut': '縮小',
+        'NavigationControl.ResetBearing': '重設方向',
+      },
+      canvasContextAttributes: {
+        antialias: false,
+        powerPreference: 'low-power' as const,
+        failIfMajorPerformanceCaveat: false,
+        preserveDrawingBuffer: false,
+        desynchronized: false,
+      },
+    }
     try {
-      map = new Map({
-        container,
-        style: STYLE,
-        center: [114.15, 22.35],
-        zoom: 10.4,
-        attributionControl: { compact: window.innerWidth < 768 },
-        locale: {
-          'NavigationControl.ZoomIn': '放大',
-          'NavigationControl.ZoomOut': '縮小',
-          'NavigationControl.ResetBearing': '重設方向',
-        },
-      })
+      map = new Map(options)
     } catch {
-      onMapProblem(true)
-      return
+      container.replaceChildren()
+      try {
+        map = new Map({ ...options, canvasContextAttributes: undefined })
+      } catch {
+        if (alive) onFallback()
+        return
+      }
     }
 
     map.addControl(new NavigationControl({ showCompass: false }), 'top-left')
     mapRef.current = map
 
     const failedTimer = window.setTimeout(() => {
-      if (alive) onMapProblem(true)
-    }, 12000)
+      if (alive && !map.isStyleLoaded()) onFallback()
+    }, 10000)
 
     map.on('load', () => {
       if (!alive) return
@@ -334,7 +361,7 @@ export function MapView({
       map.remove()
       mapRef.current = null
     }
-  }, [cameras, network, onMapProblem])
+  }, [cameras, network, onFallback, onMapProblem])
 
   useEffect(() => {
     const map = mapRef.current
