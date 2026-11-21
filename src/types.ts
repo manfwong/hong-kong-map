@@ -46,17 +46,19 @@ export type CameraSite = {
 }
 
 export type Arrival = {
-  seq?: string
+  seq?: string | number
   dest?: string
-  plat?: string
+  plat?: string | number
   time?: string
-  ttnt?: string
+  ttnt?: string | number
   valid?: string
+  route?: string
 }
 
 export type SchedulePayload = {
   status?: number
   message?: string
+  url?: string
   isdelay?: string
   sys_time?: string
   data?: Record<
@@ -75,6 +77,7 @@ export type TrainRow = {
   platform: string
   clock: string
   uncertain: boolean
+  viaRacecourse: boolean
 }
 
 export type DirectionBlock = {
@@ -89,6 +92,7 @@ export type LineSchedule = {
   color: string
   delayed: boolean
   notice: string | null
+  noticeUrl: string | null
   directions: DirectionBlock[]
   emptyNote: string | null
   updatedAt: string | null

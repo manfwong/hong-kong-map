@@ -28,8 +28,15 @@ type Props = {
   onMapProblem: (failed: boolean) => void
 }
 
-const RAIL_LAYERS = ['rail-casing', 'rail-lines', 'station-points', 'station-labels']
+const RAIL_LAYERS = ['rail-casing', 'rail-lines', 'station-hits', 'station-points', 'station-labels']
 const CAMERA_LAYERS = ['camera-clusters', 'camera-counts', 'camera-points']
+
+function viewPadding(): PaddingOptions {
+  if (window.innerWidth < 768) {
+    return { top: 28, bottom: Math.round(window.innerHeight * 0.46) + 28, left: 20, right: 20 }
+  }
+  return { top: 28, bottom: 28, left: 28, right: 430 }
+}
 
 function applyVisibility(map: Map, showRail: boolean, showCameras: boolean) {
   const rail = showRail ? 'visible' : 'none'
@@ -76,7 +83,7 @@ export function MapView({
         style: STYLE,
         center: [114.15, 22.35],
         zoom: 10.4,
-        attributionControl: { compact: true },
+        attributionControl: { compact: window.innerWidth < 768 },
         locale: {
           'NavigationControl.ZoomIn': '放大',
           'NavigationControl.ZoomOut': '縮小',
@@ -198,6 +205,15 @@ export function MapView({
         },
       })
       map.addLayer({
+        id: 'station-hits',
+        type: 'circle',
+        source: 'stations',
+        paint: {
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 14, 13, 16, 16, 18],
+        },
+      })
+      map.addLayer({
         id: 'station-points',
         type: 'circle',
         source: 'stations',
@@ -243,16 +259,13 @@ export function MapView({
 
       const bounds = new LngLatBounds()
       for (const station of network.stations) bounds.extend([station.lng, station.lat])
-      const wide = window.innerWidth >= 768
       map.fitBounds(bounds, {
-        padding: wide
-          ? { top: 28, bottom: 28, left: 28, right: 430 }
-          : { top: 24, bottom: 220, left: 20, right: 20 },
+        padding: viewPadding(),
         maxZoom: 11.3,
         duration: 0,
       })
 
-      for (const layer of ['station-points', 'camera-points', 'camera-clusters']) {
+      for (const layer of ['station-hits', 'station-points', 'camera-points', 'camera-clusters']) {
         map.on('mouseenter', layer, () => {
           map.getCanvas().style.cursor = 'pointer'
         })
@@ -262,7 +275,9 @@ export function MapView({
       }
 
       map.on('click', (event) => {
-        const stationHit = map.queryRenderedFeatures(event.point, { layers: ['station-points'] })[0]
+        const stationHit = map.queryRenderedFeatures(event.point, {
+          layers: ['station-points', 'station-hits'],
+        })[0]
         const stationCode = stationHit?.properties?.code
         if (typeof stationCode === 'string') {
           handlersRef.current.onSelectStation(stationCode)
@@ -338,14 +353,10 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready || !focus) return
-    const narrow = window.innerWidth < 768
-    const padding: PaddingOptions = narrow
-      ? { top: 28, bottom: Math.round(window.innerHeight * 0.46) + 28, left: 20, right: 20 }
-      : { top: 28, bottom: 28, left: 28, right: 430 }
     map.flyTo({
       center: [focus.lng, focus.lat],
       zoom: Math.max(map.getZoom(), focus.zoom),
-      padding,
+      padding: viewPadding(),
       essential: true,
     })
   }, [focus, ready])

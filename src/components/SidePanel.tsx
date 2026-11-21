@@ -5,6 +5,10 @@ function placeName(description: string): string {
   return description.replace(/\s*\[[^\]]+\]\s*$/, '')
 }
 
+function foldName(value: string): string {
+  return value.replaceAll('\u8318', '\u8354').replaceAll('\u7864', '\u5cfd').toLowerCase()
+}
+
 function channel(value: number): number {
   const normalized = value / 255
   return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
@@ -60,11 +64,11 @@ export function SidePanel({
   const trimmed = query.trim()
   const stationHits = useMemo(() => {
     if (!trimmed) return []
-    const needle = trimmed.toLowerCase()
+    const needle = foldName(trimmed)
     return network.stations
       .filter(
         (item) =>
-          item.name.includes(trimmed) ||
+          foldName(item.name).includes(needle) ||
           item.nameEn.toLowerCase().includes(needle) ||
           item.code.toLowerCase() === needle,
       )
@@ -72,12 +76,13 @@ export function SidePanel({
   }, [network.stations, trimmed])
   const cameraHits = useMemo(() => {
     if (!trimmed) return []
+    const needle = foldName(trimmed)
     return cameras
       .filter(
         (item) =>
-          item.description.includes(trimmed) ||
-          item.district.includes(trimmed) ||
-          item.region.includes(trimmed),
+          foldName(item.description).includes(needle) ||
+          foldName(item.district).includes(needle) ||
+          foldName(item.region).includes(needle),
       )
       .slice(0, 5)
   }, [cameras, trimmed])
@@ -238,7 +243,22 @@ function StationDetail({
               <p className="mt-1 text-xs text-[#6b645c]">資料時間 {schedule.updatedAt.slice(11) || schedule.updatedAt}</p>
             ) : null}
             {schedule.notice ? (
-              <p className="mt-3 rounded-xl bg-[#f6f1e6] px-3 py-2 text-sm leading-6">港鐵提示：{schedule.notice}</p>
+              <p className="mt-3 rounded-xl bg-[#f6f1e6] px-3 py-2 text-sm leading-6">
+                港鐵提示：{schedule.notice}
+                {schedule.noticeUrl ? (
+                  <>
+                    {' '}
+                    <a
+                      className="font-medium underline"
+                      href={schedule.noticeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      查看詳情
+                    </a>
+                  </>
+                ) : null}
+              </p>
             ) : null}
             {schedule.directions.map((direction) => (
               <div key={direction.title} className="mt-3">
@@ -250,6 +270,7 @@ function StationDetail({
                       {row.minutesLabel}
                       {row.platform ? ` · ${row.platform} 號月台` : ''}
                       {row.clock ? ` · ${row.clock}` : ''}
+                      {row.viaRacecourse ? ' · 經馬場' : ''}
                       {row.uncertain ? ' · 時間未確定' : ''}
                     </li>
                   ))}
@@ -277,6 +298,7 @@ function StationDetail({
           </article>
         ))}
       </div>
+      <p className="mt-4 text-xs leading-5 text-[#6b645c]">到站資料來自港鐵公司。車站位置來自 OpenStreetMap。</p>
     </div>
   )
 }

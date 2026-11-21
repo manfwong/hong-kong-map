@@ -188,7 +188,7 @@ def main() -> None:
                         "code": line_code,
                         "name": LINE_BY_CODE[line_code]["name"],
                         "color": LINE_BY_CODE[line_code]["color"],
-                        "terminus": code == "RAC" or is_terminus(code, line_code),
+                        "terminus": is_terminus(code, line_code),
                     }
                     for line_code in line_codes
                 ],
