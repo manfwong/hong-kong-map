@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif;
+  --color-ink: #1c1915;
+  --color-paper: #f7f4ee;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.maplibregl-ctrl-top-left {
+  top: 8px;
+  left: 8px;
+}
+
+.maplibregl-ctrl-bottom-right {
+  left: 8px !important;
+  right: auto !important;
+  bottom: 8px;
+}
+
+@media (max-width: 767px) {
+  .maplibregl-ctrl-bottom-right {
+    bottom: calc(46vh + 16px);
+  }
+}
+
+.maplibregl-ctrl-group {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 11px;
+}
